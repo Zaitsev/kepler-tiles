@@ -9,6 +9,8 @@ import { taskMiddleware } from 'react-palm/tasks';
 import window from 'global/window';
 import * as Immutable from 'immutable';
 import { MAPID } from './app';
+import debounce from 'lodash.debounce';
+import { createAction } from 'redux-actions';
 
 const customizedKeplerGlReducer = keplerGlReducer
     .initialState({
@@ -91,27 +93,30 @@ const composeTileLayerId = (dsid, cog_field_name) => `${dsid}_${cog_field_name}_
  *  callback called with arguments (layerIdx, lid) where `layerIdx` is index in layers List and  `lid` is _sourceId_ of tiles layer
  *
  * @param keplerState
- * @param dataId
- * @param geojson
+ * @param oldLayerConfig
  * @param callback
  * @returns {null}
  */
-const processMapLyaer = (keplerState, dataId, geojson, callback) => {
-    try {
-        const dataset = keplerState.visState.datasets[dataId];
-        if (dataset.fields[geojson.fieldIdx].type !== 'geojson' || dataset.fields[geojson.fieldIdx].name !== geojson.value) {
-            console.error(`layer field dont have corresponding data field ${geojson.value} in ${dataset.label}`);
-            return null
+const processMapLyaer = (keplerState, { config: { dataId, columns: { geojson } } }, callback) => {
+    if (geojson) {
+        try {
+            const dataset = keplerState.visState.datasets[dataId];
+            if (dataset.fields[geojson.fieldIdx].type !== 'geojson' || dataset.fields[geojson.fieldIdx].name !== geojson.value) {
+                console.error(`layer field dont have corresponding data field ${geojson.value} in ${dataset.label}`);
+                return null
+            }
+            const lid = composeTileLayerId(dataId, geojson.value);
+            let immutable_bottom = keplerState.mapStyle.bottomMapStyle;
+            let new_kepler_layers = immutable_bottom.get('layers');
+            let layerIdx = new_kepler_layers.findIndex(l => l.has('source') && l.get('source') === lid);
+            if (layerIdx !== -1) {
+                callback(layerIdx, lid);
+            }
+        } catch (e) {
+            console.error('Exception while processing layer', e)
         }
-        const lid = composeTileLayerId(dataId, geojson.value);
-        let immutable_bottom = keplerState.mapStyle.bottomMapStyle;
-        let new_kepler_layers = immutable_bottom.get('layers');
-        let layerIdx = new_kepler_layers.findIndex(l => l.has('source') && l.get('source') === lid);
-        if (layerIdx !== -1) {
-            callback(layerIdx, lid);
-        }
-    } catch (e) {
-        console.error('Exception while processing layer', e)
+    } else {
+        console.warn('bad geojson')
     }
 };
 
@@ -120,32 +125,33 @@ const processLAYER_CONFIG_CHANGE = (state, action) => {
     if (!keplerState.mapStyle.bottomMapStyle) {
         return null;
     }
-    //todo filter by visibility and opacity canges only
-    if (!(
-        action.payload.newConfig && action.payload.newConfig.hasOwnProperty('isVisible')
-        || action.payload.newVisConfig && action.payload.newVisConfig.hasOwnProperty('opacity')
-    )) {
+
+    let imutable_bottom = keplerState.mapStyle.bottomMapStyle;
+    const newVisibility = action.payload.newConfig.isVisible ? 'visible' : 'hidden';
+    processMapLyaer(keplerState, action.payload.oldLayer, (layerIdx) => {
+        imutable_bottom = imutable_bottom.setIn(['layers', layerIdx, 'layout', 'visibility'], newVisibility);
+    });
+    if (keplerState.mapStyle.bottomMapStyle !== imutable_bottom) {
+        keplerState.mapStyle.bottomMapStyle = imutable_bottom;
+        return customizedKeplerGlReducer(state.keplerGl, action);
+    }
+    return null
+
+};
+const processDebouncedOpacity = (state, action) => {
+    let keplerState = state.keplerGl[MAPID];
+    if (!keplerState.mapStyle.bottomMapStyle) {
         return null;
     }
 
-
-    const { config: { dataId, columns: { geojson } } } = action.payload.oldLayer;
-    if (geojson) {
-        let imutable_bottom = keplerState.mapStyle.bottomMapStyle;
-        let new_kepler_layers = imutable_bottom.get('layers');
-        processMapLyaer(keplerState, dataId, geojson, (layerIdx) => {
-            if (action.payload.newConfig && action.payload.newConfig.hasOwnProperty('isVisible')) {
-                const newVisibility = action.payload.newConfig.isVisible ? 'visible' : 'hidden';
-                new_kepler_layers = new_kepler_layers.update(layerIdx, layer => layer.setIn(['layout', 'visibility'], newVisibility));
-            }
-            if (action.payload.newVisConfig && action.payload.newVisConfig.hasOwnProperty('opacity')) {
-                new_kepler_layers = new_kepler_layers.update(layerIdx, layer => layer.setIn(['paint', 'raster-opacity'], action.payload.newVisConfig.opacity));
-            }
-        });
-        if (new_kepler_layers !== imutable_bottom.get('layers')) {
-            state.keplerGl[MAPID].mapStyle.bottomMapStyle = imutable_bottom.set('layers', new_kepler_layers);
-            return customizedKeplerGlReducer(state.keplerGl, action);
-        }
+    const { newVisConfig: { opacity } } = action.payload;
+    let immutable_bottom = keplerState.mapStyle.bottomMapStyle;
+    processMapLyaer(keplerState, action.payload, (layerIdx) => {
+        immutable_bottom = immutable_bottom.setIn(['layers', layerIdx, 'paint', 'raster-opacity'], opacity);
+    });
+    if (keplerState.mapStyle.bottomMapStyle !== immutable_bottom) {
+        keplerState.mapStyle.bottomMapStyle = immutable_bottom;
+        return customizedKeplerGlReducer(state.keplerGl, action);
     }
     return null
 
@@ -155,22 +161,18 @@ const processREMOVE_LAYER = (state, action) => {
     if (!keplerState.mapStyle.bottomMapStyle) {
         return null;
     }
-    const oldLayer = state.keplerGl[MAPID].visState.layers[action.payload.idx];
+    const oldLayer = keplerState.visState.layers[action.payload.idx];
     const { config: { dataId, columns: { geojson } } } = oldLayer;
-    if (geojson) {
-        let immutable_bottom = keplerState.mapStyle.bottomMapStyle;
-        processMapLyaer(keplerState, dataId, geojson, (layerIdx, lid) => {
-            // console.debug('before', immutable_bottom);
-            immutable_bottom = immutable_bottom
-                .update('layers', layers => layers.filterNot(layer => layer.has('source') && layer.get('source') === lid))
-                .update('sources', sources => sources.filterNot((val, key) => key === lid))
-            ;
-            // console.debug('after', immutable_bottom);
-        });
-        if (keplerState.mapStyle.bottomMapStyle !== immutable_bottom) {
-            state.keplerGl[MAPID].mapStyle.bottomMapStyle = immutable_bottom;
-            return customizedKeplerGlReducer(state.keplerGl, action);
-        }
+    let immutable_bottom = keplerState.mapStyle.bottomMapStyle;
+    processMapLyaer(keplerState, oldLayer, (layerIdx, lid) => {
+        immutable_bottom = immutable_bottom
+            .update('layers', layers => layers.filterNot(layer => layer.has('source') && layer.get('source') === lid))
+            .update('sources', sources => sources.filterNot((val, key) => key === lid))
+        ;
+    });
+    if (keplerState.mapStyle.bottomMapStyle !== immutable_bottom) {
+        keplerState.mapStyle.bottomMapStyle = immutable_bottom;
+        return customizedKeplerGlReducer(state.keplerGl, action);
     }
     return null;
 };
@@ -178,20 +180,15 @@ const processREMOVE_LAYER = (state, action) => {
 
 const processREMOVE_DATASET = (state, action) => {
     let keplerState = state.keplerGl[MAPID];
-    const dataId = action.payload.key;
     if (!keplerState.mapStyle.bottomMapStyle) {
         return null;
     }
-    let new_kepler_state = customizedKeplerGlReducer(state.keplerGl, action);
-    let imutable_bottom = new_kepler_state[MAPID].mapStyle.bottomMapStyle;
-
-    const reg = new RegExp(`${dataId}.+_cogurl`);
-    new_kepler_state[MAPID].mapStyle.bottomMapStyle = imutable_bottom
+    const reg = new RegExp(`${action.payload.key}.+_cogurl`);
+    keplerState.mapStyle.bottomMapStyle = keplerState.mapStyle.bottomMapStyle
         .update('layers', layers => layers.filterNot(layer => reg.test(layer.get('source'))))
         .update('sources', sources => sources.filterNot((val, key) => reg.test(key)))
     ;
-
-    return new_kepler_state;
+    return customizedKeplerGlReducer(state.keplerGl, action);
 };
 const processADD_DATA_TO_MAP = (state, action) => {
     if (!action.payload.datasets || !action.payload.datasets.length) {
@@ -270,15 +267,38 @@ const processADD_DATA_TO_MAP = (state, action) => {
 
     return null;
 };
+
+const debouncedOpacityAction = createAction('DEBOUNCED_OPACITY');
 const composedReducer = (state, action) => {
     //TODO add debounce to opacity
 
-    // console.log(action.payload);
-
-    if (['@@kepler.gl/LAYER_VIS_CONFIG_CHANGE', '@@kepler.gl/LAYER_CONFIG_CHANGE'].includes(action.type)) {
-        const new_kepler_state = processLAYER_CONFIG_CHANGE(state, action);
+    if (['DEBOUNCED_OPACITY'].includes(action.type)) {
+        const new_kepler_state = processDebouncedOpacity(state, action);
         if (new_kepler_state) {
             return { ...state, keplerGl: new_kepler_state }
+        }
+    }
+    if (['@@kepler.gl/LAYER_CONFIG_CHANGE'].includes(action.type)) {
+        if (
+            action.payload.newConfig && action.payload.newConfig.hasOwnProperty('isVisible')
+        ) {
+            const new_kepler_state = processLAYER_CONFIG_CHANGE(state, action);
+            if (new_kepler_state) {
+                return { ...state, keplerGl: new_kepler_state }
+            }
+        }
+    }
+    if (['@@kepler.gl/LAYER_VIS_CONFIG_CHANGE'].includes(action.type)) {
+        if (action.payload.newVisConfig && action.payload.newVisConfig.hasOwnProperty('opacity')) {
+            const { config: { dataId, columns: { geojson } } } = action.payload.oldLayer;
+            //make payload layer-like
+            dispatchDebouncedOpacity({
+                config: {
+                    dataId,
+                    columns: { geojson },
+
+                }, newVisConfig: { opacity: action.payload.newVisConfig.opacity }
+            });
         }
     }
     if (['@@kepler.gl/REMOVE_DATASET'].includes(action.type)) {
@@ -319,4 +339,13 @@ const store = createStore(
     initialState,
     composeEnhancers(...enhancers)
 );
+
+
+const dispatchDebouncedOpacity = debounce((payload) => {
+    store.dispatch(debouncedOpacityAction(payload));
+}, 300, {
+    'leading': false,
+    'trailing': true
+});
+
 export default store;
