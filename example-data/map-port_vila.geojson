@@ -1,0 +1,20 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "COGURL": "http://159.122.178.150:30458/tiles/{z}/{x}/{y}@2x?url=http://s3.eu-de.objectstorage.softlayer.net/cog-1/cog-example.tif"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [168.452,-17.557],[168.452,-17.550],[168.459,-17.549],[168.459,-17.557],[168.452,-17.557]
+          ]
+        ]
+      }
+    }
+  ]
+}
+

@@ -1,0 +1,21 @@
+version: '3'
+services:
+  web:
+    image:  kepler-web
+    build: ./
+    ports:
+    - "8080:80"
+    volumes:
+      - ./nginx.conf:/nginx.conf
+      - ./nginx.conf/default.conf:/etc/nginx/conf.d/default.conf
+  tiles:
+    image: vladzaitsev/tilesrdntio_tiles
+    environment:
+    - PYTHONPATH=.
+    # env_file: .env
+#    volumes:
+#      - ./cutter:/opt/marblecutter/
+    ports:
+    - "8090:8000"
+#    entrypoint: python
+ #   command: server.py

@@ -1,0 +1,2 @@
+column_0,sourceid,geojson5
+1,567,"{""type"":""Feature"",""geometry"":{""type"":""Polygon"",""coordinates"":[[[35,48],[29,54],[33,38],[35,48]]]},""properties"":{""COGURL"":""http://s3.eu-de.objectstorage.softlayer.net/cog-1/cog-vietnam.tif""}}"

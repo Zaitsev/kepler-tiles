@@ -1,0 +1,53 @@
+{
+  "version": "v1",
+  "config": {
+    "visState": {
+      "filters": [],
+      "layers": [
+      ],
+      "interactionConfig": {
+        "tooltip": {
+          "fieldsToShow": {
+            "tree_data": [
+              "TreeID",
+              "Species",
+              "Address",
+              "Has_Species",
+              "SiteInfo"
+            ]
+          },
+          "enabled": false
+        },
+        "brush": {
+          "size": 0.5,
+          "enabled": false
+        }
+      },
+      "layerBlending": "normal",
+      "splitMaps": []
+    },
+    "mapState": {
+      "bearing": 0,
+      "dragRotate": false,
+      "latitude": -17.557596404471095,
+      "longitude": 168.4525198436761,
+      "pitch": 0,
+      "zoom": 12,
+      "isSplit": false
+    },
+    "mapStyle": {
+      "styleType": "dark",
+      "topLayerGroups": {
+        "label": true
+      },
+      "visibleLayerGroups": {
+        "label": true,
+        "road": true,
+        "border": false,
+        "building": true,
+        "water": true,
+        "land": true
+      }
+    }
+  }
+}

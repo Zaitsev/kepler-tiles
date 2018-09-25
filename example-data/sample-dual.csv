@@ -1,0 +1,2 @@
+column_0,sourceid,geojson,separator_1,geojson5
+1,567,"{""type"":""Feature"",""geometry"":{""type"":""Polygon"",""coordinates"":[[[168.452,-17.557],[168.452,-17.549],[168.459,-17.557],[168.452,-17.557]]]},""properties"":{""COGURL"":""http://s3.eu-de.objectstorage.softlayer.net/cog-1/cog-example.tif""}}",0,"{""type"":""Feature"",""geometry"":{""type"":""Polygon"",""coordinates"":[[[35,48],[29,54],[33,38],[35,48]]]},""properties"":{""COGURL"":""http://s3.eu-de.objectstorage.softlayer.net/cog-1/cog-vietnam.tif""}}"
